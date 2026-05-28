@@ -2,16 +2,14 @@
 /**
  * voxread — TypeScript CLI wrapper
  *
- * Spawns the Python Flask API and provides a typed interface
- * for the /speak and /read endpoints.
+ * Typed client for the voxread Flask API.
+ * Supports speak, read, and health commands.
  *
  * @module voxread-cli
  */
 
-import { execSync, spawn } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as readline from "node:readline";
 
 // ------------------------------------------------------------------
 // Types
@@ -23,43 +21,46 @@ type Backend = "gtts" | "pyttsx3";
 /** Options for the speak command */
 interface SpeakOptions {
   text: string;
-  backend?: Backend;
-  lang?: string;
+  backend: Backend;
+  lang: string;
 }
 
 /** Options for the read command */
 interface ReadOptions {
   filePath: string;
-  backend?: Backend;
-  lang?: string;
+  backend: Backend;
+  lang: string;
 }
 
-/** Successful speak/read response from the API */
+/** Successful API response */
 interface VoxResponse {
   status: "ok";
-  file?: string;
   files?: string[];
-  downloads: string[] | string;
+  downloads: string[];
   words: number;
   chunks?: number;
 }
 
-/** Error response from the API */
+/** Error response */
 interface VoxError {
   error: string;
 }
 
 // ------------------------------------------------------------------
-// API client
+// Config
 // ------------------------------------------------------------------
 
 const BASE_URL = "http://localhost:5000";
 
+// ------------------------------------------------------------------
+// API client
+// ------------------------------------------------------------------
+
 /**
  * POST /speak — synthesise raw text.
  *
- * @param options - SpeakOptions containing text, backend, lang
- * @returns VoxResponse with download path
+ * @param options - SpeakOptions
+ * @returns VoxResponse
  */
 async function speak(options: SpeakOptions): Promise<VoxResponse> {
   const res = await fetch(`${BASE_URL}/speak`, {
@@ -67,38 +68,34 @@ async function speak(options: SpeakOptions): Promise<VoxResponse> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       text: options.text,
-      backend: options.backend ?? "gtts",
-      lang: options.lang ?? "en",
+      backend: options.backend,
+      lang: options.lang,
     }),
   });
 
   const data = (await res.json()) as VoxResponse | VoxError;
-
   if (!res.ok || "error" in data) {
     throw new Error((data as VoxError).error ?? "Unknown error");
   }
-
   return data as VoxResponse;
 }
 
 /**
  * POST /read — upload a file and synthesise its contents.
  *
- * @param options - ReadOptions containing filePath, backend, lang
- * @returns VoxResponse with download paths
+ * @param options - ReadOptions
+ * @returns VoxResponse
  */
 async function readFile(options: ReadOptions): Promise<VoxResponse> {
-  const { filePath, backend = "gtts", lang = "en" } = options;
-
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`File not found: ${filePath}`);
+  if (!fs.existsSync(options.filePath)) {
+    throw new Error(`File not found: ${options.filePath}`);
   }
 
   const form = new FormData();
-  const blob = new Blob([fs.readFileSync(filePath)]);
-  form.append("file", blob, path.basename(filePath));
-  form.append("backend", backend);
-  form.append("lang", lang);
+  const blob = new Blob([fs.readFileSync(options.filePath)]);
+  form.append("file", blob, path.basename(options.filePath));
+  form.append("backend", options.backend);
+  form.append("lang", options.lang);
 
   const res = await fetch(`${BASE_URL}/read`, {
     method: "POST",
@@ -106,18 +103,14 @@ async function readFile(options: ReadOptions): Promise<VoxResponse> {
   });
 
   const data = (await res.json()) as VoxResponse | VoxError;
-
   if (!res.ok || "error" in data) {
     throw new Error((data as VoxError).error ?? "Unknown error");
   }
-
   return data as VoxResponse;
 }
 
 /**
- * GET /health — check if the API server is running.
- *
- * @returns true if server is up
+ * GET /health — check if the API is running.
  */
 async function checkHealth(): Promise<boolean> {
   try {
@@ -129,8 +122,21 @@ async function checkHealth(): Promise<boolean> {
 }
 
 // ------------------------------------------------------------------
-// CLI runner
+// Arg parser
 // ------------------------------------------------------------------
+
+function parseArgs(args: string[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg.startsWith("--") && args[i + 1] !== undefined) {
+      result[arg.slice(2)] = args[++i] as string;
+    } else if (result["_arg"] === undefined) {
+      result["_arg"] = arg;
+    }
+  }
+  return result;
+}
 
 function printUsage(): void {
   console.log(`
@@ -149,54 +155,48 @@ Examples:
   `);
 }
 
-function parseArgs(args: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith("--") && args[i + 1]) {
-      result[args[i].slice(2)] = args[++i];
-    } else if (!result["_arg"]) {
-      result["_arg"] = args[i];
-    }
-  }
-  return result;
-}
+// ------------------------------------------------------------------
+// Main
+// ------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const [command, ...rest] = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const command = argv[0];
 
   if (!command || command === "--help" || command === "-h") {
     printUsage();
     process.exit(0);
   }
 
-  // health check
   if (command === "health") {
     const up = await checkHealth();
     if (up) {
       console.log("✓ voxread API is up at", BASE_URL);
     } else {
-      console.error("✗ voxread API is not running. Start it with:");
-      console.error("  python -m tts_reader.api");
+      console.error("✗ API not running. Start it with: python -m tts_reader.api");
       process.exit(1);
     }
     return;
   }
 
-  const args = parseArgs(rest);
-  const backend = (args["backend"] as Backend) ?? "gtts";
-  const lang = args["lang"] ?? "en";
+  const args = parseArgs(argv.slice(1));
+  const backend: Backend = (args["backend"] as Backend) ?? "gtts";
+  const lang: string = args["lang"] ?? "en";
+  const argVal: string = args["_arg"] ?? "";
 
   if (command === "speak") {
-    if (!args["_arg"]) {
+    if (!argVal) {
       console.error('✗ Missing text. Usage: tsx index.ts speak "your text"');
       process.exit(1);
     }
-
     console.log("→ Synthesising...");
     try {
-      const result = await speak({ text: args["_arg"], backend, lang });
+      const result = await speak({ text: argVal, backend, lang });
+      const downloads = Array.isArray(result.downloads)
+        ? result.downloads
+        : [result.downloads];
       console.log(`✓ Done. ${result.words} words.`);
-      console.log(`  Download: ${BASE_URL}${result.download}`);
+      downloads.forEach((d) => console.log(`  Download: ${BASE_URL}${d}`));
     } catch (err) {
       console.error("✗ Error:", (err as Error).message);
       process.exit(1);
@@ -205,18 +205,13 @@ async function main(): Promise<void> {
   }
 
   if (command === "read") {
-    if (!args["_arg"]) {
-      console.error("✗ Missing file path. Usage: tsx index.ts read <file>");
+    if (!argVal) {
+      console.error("✗ Missing file. Usage: tsx index.ts read <file>");
       process.exit(1);
     }
-
-    console.log(`→ Reading: ${args["_arg"]}`);
+    console.log(`→ Reading: ${argVal}`);
     try {
-      const result = await readFile({
-        filePath: args["_arg"],
-        backend,
-        lang,
-      });
+      const result = await readFile({ filePath: argVal, backend, lang });
       const downloads = Array.isArray(result.downloads)
         ? result.downloads
         : [result.downloads];
