@@ -8,3 +8,9 @@ node_modules/
 *.mp3
 *.wav
 .env
+output/
+uploads/
+test_input.txt
+*.egg-info/
+__pycache__/
+voxread.egg-info/
