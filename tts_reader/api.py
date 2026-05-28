@@ -109,8 +109,8 @@ def speak() -> tuple:
         path = engine.speak(text, output_file=output_file)
         return jsonify({
             "status": "ok",
-            "file": path.name,
-            "download": f"/output/{path.name}",
+            "files": [path.name],
+            "downloads": [f"/output/{path.name}"],
             "words": len(text.split()),
         }), 201
 
