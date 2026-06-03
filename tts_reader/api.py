@@ -20,6 +20,7 @@ import uuid
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
 from tts_reader.engine import VoxEngine, TTSBackend
@@ -31,6 +32,7 @@ from tts_reader.reader import read_file
 # ------------------------------------------------------------------
 
 app = Flask(__name__)
+CORS(app)
 
 OUTPUT_DIR = Path("output")
 UPLOAD_DIR = Path("uploads")
