@@ -1,73 +1,90 @@
-# React + TypeScript + Vite
+# voxread — frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> React + TypeScript UI for the voxread text-to-speech engine.
 
-Currently, two official plugins are available:
+Part of the [voxread](https://github.com/ngocho24/voxread) project.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 18** + **TypeScript**
+- **Vite** — dev server and bundler
+- **CSS variables** — design system
+- Google Fonts — Syne + DM Mono
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Requirements
+- Node.js 20+
+- voxread backend running on `http://localhost:5000`
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Install and run
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# from the project root
+cd frontend
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open `http://localhost:5173`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Start the backend first
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# from project root
+source ../.venv/bin/activate
+python -m tts_reader.api
 ```
+
+## Features
+
+- **Text mode** — type or paste text, click speak
+- **File mode** — drag and drop `.txt`, `.pdf`, or `.docx`
+- **Backend selector** — gtts (online) or pyttsx3 (offline)
+- **Language selector** — English, Swahili, French, German, Spanish, Arabic
+- **Inline audio player** — play and download generated audio
+- **Multi-chunk support** — long documents split into parts
+
+## Project Structure
+frontend/
+├── src/
+│   ├── api/
+│   │   └── voxread.ts        # typed API client
+│   ├── components/
+│   │   ├── AudioPlayer.tsx   # audio playback + download
+│   │   └── Controls.tsx      # backend + language selectors
+│   ├── App.tsx               # main app — text + file modes
+│   ├── main.tsx              # entry point
+│   └── index.css             # design system + global styles
+├── public/
+├── index.html
+├── package.json
+├── tsconfig.json
+└── vite.config.ts
+
+## API Integration
+
+The frontend talks to the Flask backend at `http://localhost:5000`.
+
+| Action | Endpoint |
+|---|---|
+| Speak text | `POST /speak` |
+| Read file | `POST /read` |
+| Download audio | `GET /output/<file>` |
+| Health check | `GET /health` |
+
+The typed API client lives in `src/api/voxread.ts`.
+
+## Build for Production
+
+```bash
+npm run build
+```
+
+Output goes to `frontend/dist/`. Serve it behind nginx or any static host.
+
+## Author
+
+**Elijah Ngocho Kamau** — [github.com/ngocho24](https://github.com/ngocho24)
