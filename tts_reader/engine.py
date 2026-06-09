@@ -8,7 +8,6 @@ Core TTS engine. Supports two backends:
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 from pathlib import Path
 
