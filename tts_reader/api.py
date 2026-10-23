@@ -70,6 +70,7 @@ def health() -> tuple:
         "status": "ok",
         "version": "0.1.0",
         "backends": [b.value for b in TTSBackend],
+        "ai_configured": bool(os.environ.get("ANTHROPIC_API_KEY")),
     }), 200
 
 

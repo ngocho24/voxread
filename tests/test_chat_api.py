@@ -96,3 +96,12 @@ def test_chat_ai_not_configured(client, monkeypatch):
     monkeypatch.setattr(api, "get_chat", boom)
     r = c.post("/chat", json={"document": "Text.", "question": "Hi"})
     assert r.status_code == 503
+
+
+def test_health_reports_ai_configured(client, monkeypatch):
+    c, _ = client
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    assert c.get("/health").get_json()["ai_configured"] is True
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY")
+    assert c.get("/health").get_json()["ai_configured"] is False
