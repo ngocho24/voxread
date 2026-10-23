@@ -6,6 +6,8 @@ Flask REST API for voxread.
 Endpoints:
     POST /speak        — synthesise raw text
     POST /read         — synthesise an uploaded file
+    POST /documents    — extract text from an uploaded file
+    POST /chat         — ask Claude about a document, optionally spoken
     GET  /health       — health check
     GET  /output/<f>   — download a generated audio file
 
@@ -23,6 +25,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
+from tts_reader.ai import AIConfigError, DocumentChat, MAX_DOC_CHARS
 from tts_reader.engine import VoxEngine, TTSBackend
 from tts_reader.reader import read_file
 
@@ -193,6 +196,119 @@ def read() -> tuple:
         # clean up the uploaded temp file
         if upload_path.exists():
             upload_path.unlink()
+
+
+_chat: DocumentChat | None = None
+
+
+def get_chat() -> DocumentChat:
+    """Create the Claude client on first use so the app boots without a key."""
+    global _chat
+    if _chat is None:
+        _chat = DocumentChat()
+    return _chat
+
+
+@app.post("/documents")
+def extract_document() -> tuple:
+    """
+    Extract text from an uploaded file so it can be used with /chat.
+
+    Stateless: nothing is stored server-side. The client keeps the returned
+    text and sends it back with each question.
+
+    Form data:
+        file (file, required): .txt, .pdf, or .docx
+
+    Returns:
+        JSON with the cleaned text, word count and a truncation flag.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded. Use field name 'file'."}), 400
+
+    uploaded = request.files["file"]
+    if not uploaded.filename or not _allowed(uploaded.filename):
+        return jsonify({
+            "error": f"Unsupported file type. Allowed: {sorted(ALLOWED_EXTENSIONS)}"
+        }), 400
+
+    suffix = Path(uploaded.filename).suffix.lower()
+    upload_path = UPLOAD_DIR / secure_filename(_unique("doc", suffix))
+    uploaded.save(upload_path)
+
+    try:
+        text = read_file(upload_path)
+        return jsonify({
+            "status": "ok",
+            "filename": uploaded.filename,
+            "text": text[:MAX_DOC_CHARS],
+            "words": len(text.split()),
+            "truncated": len(text) > MAX_DOC_CHARS,
+        }), 200
+
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if upload_path.exists():
+            upload_path.unlink()
+
+
+@app.post("/chat")
+def chat() -> tuple:
+    """
+    Ask a question about a document and optionally hear the answer.
+
+    Request body (JSON):
+        document  (str, required)  : document text (from POST /documents)
+        question  (str, required)  : the question
+        history   (list, optional) : prior [{role, content}, ...] turns
+        speak     (bool, optional) : synthesise the answer - default true
+        backend   (str, optional)  : 'gtts' | 'pyttsx3' - default 'gtts'
+        lang      (str, optional)  : TTS language code - default 'en'
+
+    Returns:
+        JSON with the answer text and, if requested, an audio download path.
+    """
+    data = request.get_json(silent=True) or {}
+    document = (data.get("document") or "").strip()
+    question = (data.get("question") or "").strip()
+
+    if not document or not question:
+        return jsonify({"error": "Missing required fields: document, question"}), 400
+
+    if len(document) > MAX_DOC_CHARS:
+        return jsonify({
+            "error": f"Document too large (max {MAX_DOC_CHARS} characters)."
+        }), 413
+
+    backend: str = data.get("backend", TTSBackend.GTTS.value)
+    lang: str = data.get("lang", "en")
+    if backend not in [b.value for b in TTSBackend]:
+        return jsonify({"error": f"Invalid backend '{backend}'"}), 400
+
+    try:
+        answer = get_chat().ask(document, question, data.get("history"))
+    except AIConfigError as e:
+        return jsonify({"error": str(e)}), 503
+    except Exception as e:
+        return jsonify({"error": f"AI request failed: {e}"}), 502
+
+    result: dict = {"status": "ok", "answer": answer, "audio": None}
+
+    if data.get("speak", True) and answer:
+        try:
+            engine = VoxEngine(
+                backend=TTSBackend(backend), lang=lang, output_dir=OUTPUT_DIR
+            )
+            path = engine.speak(answer, output_file=_unique("answer", ".mp3"))
+            result["audio"] = f"/output/{path.name}"
+        except Exception as e:
+            # the text answer is still useful if speech synthesis fails
+            result["audio_error"] = str(e)
+
+    return jsonify(result), 200
 
 
 @app.get("/output/<filename>")
