@@ -3,7 +3,7 @@ voxread.reader
 ~~~~~~~~~~~~~~
 File reader module. Extracts plain text from:
 - .txt  : plain text files
-- .pdf  : PDF documents via PyPDF2
+- .pdf  : PDF documents via pypdf
 - .docx : Word documents via python-docx
 
 All readers return a clean string ready for the TTS engine.
@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PyPDF2 import PdfReader
+from pypdf import PdfReader
 from docx import Document
 
 
@@ -80,7 +80,7 @@ def _read_txt(path: Path) -> str:
 
 
 def _read_pdf(path: Path) -> str:
-    """Extract text from a PDF using PyPDF2."""
+    """Extract text from a PDF using pypdf."""
     reader = PdfReader(str(path))
     pages: list[str] = []
 
