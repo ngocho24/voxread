@@ -10,9 +10,5 @@ node_modules/
 .env
 output/
 uploads/
+.vscode/
 test_input.txt
-*.egg-info/
-__pycache__/
-voxread.egg-info/
-.env
-.env
