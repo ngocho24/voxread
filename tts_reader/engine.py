@@ -13,6 +13,7 @@ from pathlib import Path
 
 from gtts import gTTS
 import pyttsx3
+from tts_reader.text import clean_text
 
 
 class TTSBackend(str, Enum):
@@ -72,7 +73,8 @@ class VoxEngine:
         Raises:
             ValueError: If text is empty.
         """
-        if not text or not text.strip():
+        text = clean_text(text)
+        if not text:
             raise ValueError("Cannot synthesise empty text.")
 
         output_path = self.output_dir / output_file
