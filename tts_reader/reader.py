@@ -11,11 +11,11 @@ All readers return a clean string ready for the TTS engine.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from pypdf import PdfReader
 from docx import Document
+from tts_reader.text import clean_text as _clean
 
 
 # ------------------------------------------------------------------
@@ -100,31 +100,3 @@ def _read_docx(path: Path) -> str:
     doc = Document(str(path))
     paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
     return "\n".join(paragraphs)
-
-
-# ------------------------------------------------------------------
-# Text cleaning
-# ------------------------------------------------------------------
-
-def _clean(text: str) -> str:
-    """
-    Normalise extracted text for TTS consumption.
-
-    - Collapse multiple blank lines into one
-    - Strip leading/trailing whitespace per line
-    - Remove non-printable characters
-    - Normalise unicode dashes and quotes
-    """
-    # remove non-printable characters (keeps newlines, tabs)
-    text = re.sub(r"[^\x09\x0A\x0D\x20-\x7E\u00A0-\uFFFF]", " ", text)
-
-    # normalise unicode punctuation to ASCII equivalents
-    text = text.replace("\u2018", "'").replace("\u2019", "'")
-    text = text.replace("\u201C", '"').replace("\u201D", '"')
-    text = text.replace("\u2013", "-").replace("\u2014", "-")
-
-    # strip each line and collapse excessive blank lines
-    lines = [line.strip() for line in text.splitlines()]
-    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
-
-    return text.strip()
